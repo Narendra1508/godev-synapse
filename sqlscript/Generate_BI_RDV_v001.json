@@ -1,0 +1,17 @@
+{
+	"name": "Generate_BI_RDV_v001",
+	"properties": {
+		"content": {
+			"query": "-- DROP TABLE [rdv].[h_financial_transaction]\n-- DROP TABLE [rdv].[s_financial_transaction]\n\nCREATE TABLE [rdv].[h_financial_transaction]\n(\n[hk] varchar(255) NOT NULL ,\n[gdp_load_ts] datetime2 (7) NULL ,\n[gdp_src_sys_id] int NULL ,\n[gdp_oe_id] int NULL ,\n[gdp_uiss] varchar(500) NULL ,\n[gdp_pipeline_id] bigint NULL ,\n[gdp_src_desc] varchar(255) NULL ,\n[financial_transaction_bus_id] varchar(255) NULL\n)\nWITH (\nDISTRIBUTION = Hash(hk));\n\n\nCREATE TABLE [rdv].[s_financial_transaction]\n(\n[hk] char(32) NOT NULL ,\n[gdp_load_ts] datetime2 (7) NOT NULL ,\n[gdp_invalid_ts] datetime2 (7) NULL ,\n[gdp_src_sys_id] int NULL ,\n[gdp_oe_id] int NOT NULL ,\n[gdp_pipeline_id] bigint NULL ,\n[gdp_src_desc] varchar(255) NULL ,\n[gdp_uiss] varchar(500) NULL ,\n[gdp_hashdiff] char(32) NULL ,\n[invld_flg] numeric(1) NULL ,\n[oe_tech_vld_from_ts] datetime2 (7) NULL ,\n[bus_eff_from_ts] datetime2 (7) NULL ,\n[fdr_sys_tnnt_nm] varchar(10) NULL ,\n[fdr_sys_bkd_area_nm] varchar(10) NULL ,\n[bkd_dt_ts] datetime2 (7) NULL ,\n[bkd_prd] varchar(10) NULL ,\n[vchr_dt] date NULL ,\n[fdr_sys_ldgr_group_1_nm] varchar(10) NULL ,\n[fdr_sys_allctn_no_txt] varchar(20) NULL ,\n[grp_dmstc_curr_amt] numeric(18,2) NULL ,\n[grp_dmstc_curr_orig_amt] numeric(18,2) NULL ,\n[trans_curr_amt] numeric(18,2) NULL ,\n[trans_curr_orig_amt] numeric(18,2) NULL ,\n[fdr_sys_curr_cd] varchar(50) NULL ,\n[fdr_sys_vchr_no_ref_1_cd] varchar(50) NULL ,\n[vchr_no_ref_fnctnl_txt] varchar(20) NULL ,\n[bkd_cntr_nm] varchar(10) NULL ,\n[vat_cd] varchar(50) NULL ,\n[fdr_sys_id] varchar(10) NULL ,\n[pre_fdr_sys_id] varchar(10) NULL ,\n[curr_key_first_lcl_curr_cd] varchar(50) NULL ,\n[fdr_sys_ldgr_group_2_nm] varchar(10) NULL ,\nCONSTRAINT [XPKSatellite_Financial_Transaction] PRIMARY KEY NONCLUSTERED ([hk],[gdp_load_ts]) NOT ENFORCED\n)\nWITH (\nDISTRIBUTION = Hash(hk));\n\n",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "Pool1",
+				"poolName": "Pool1"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}
