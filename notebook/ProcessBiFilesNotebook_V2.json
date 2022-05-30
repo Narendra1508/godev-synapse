@@ -1,0 +1,672 @@
+{
+	"name": "ProcessBiFilesNotebook_V2",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "Pool1",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "084137d6-a232-4449-8cc5-a181d85ca7c8"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/f0b52967-ba69-469d-a9c3-06bc81662230/resourceGroups/spf-mvp-rg-synapse-dev-00/providers/Microsoft.Synapse/workspaces/spf-synapse-dev-00/bigDataPools/Pool1",
+				"name": "Pool1",
+				"type": "Spark",
+				"endpoint": "https://spf-synapse-dev-00.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/Pool1",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "2.4",
+				"nodeCount": 3,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": false
+			},
+			"sessionKeepAliveTimeout": 120
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Define parameters and variables"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Parameters from pipeline"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"tags": [
+						"parameters"
+					]
+				},
+				"source": [
+					"# This control file name will be passed as from the pipeline\r\n",
+					"ctl_filename = \"ABS_20220226_03834.ctl\" # This is the default value"
+				],
+				"execution_count": 29
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Parameters from notebook"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# storage account parameters\r\n",
+					"storage_account = \"spfmvpsynapsedev00\"\r\n",
+					"\r\n",
+					"# conatiner parameters\r\n",
+					"upload_container = \"spf-bi-upload\"\r\n",
+					"metadata_container = \"spf-bi-metadata\"\r\n",
+					"curated_container = \"spf-bi-curated\"\r\n",
+					"\r\n",
+					"# file name parameters\r\n",
+					"metadata_filename = \"metadata.csv\"\r\n",
+					"schema_filename = \"eing_abs_csv.csv\" # remove this line once the schema file from edc is used\r\n",
+					"data_filename = filename.replace('.ctl', '.dat')"
+				],
+				"execution_count": 86
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Import Libraries"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"from pyspark.sql.functions import *\r\n",
+					"from pyspark.sql.types import *\r\n",
+					"import logging\r\n",
+					"\r\n",
+					"# Customize the logging format\r\n",
+					"FORMAT = \"%(asctime)s - %(name)s - %(levelname)s - %(message)s\"\r\n",
+					"formatter = logging.Formatter(fmt=FORMAT)\r\n",
+					"for handler in logging.getLogger().handlers:\r\n",
+					"    handler.setFormatter(formatter)\r\n",
+					"\r\n",
+					"# Customize the log level for a specific logger\r\n",
+					"syn_logger = logging.getLogger('syn-notebook-log')\r\n",
+					"syn_logger.setLevel(logging.INFO)\r\n",
+					"\r\n",
+					"# syn_logger.debug(\"customized debug message\")\r\n",
+					"# syn_logger.info(\"customized info message\")\r\n",
+					"# syn_logger.warning(\"customized warning message\")\r\n",
+					"# syn_logger.error(\"customized error message\")\r\n",
+					"# syn_logger.critical(\"customized critical message\")"
+				],
+				"execution_count": 77
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Fetch the metadata based on feeder_system_id (like delimiter and schema to apply)\r\n",
+					"This will not be necessary once we read the details from EDC via REST endpoint"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"# define schema for reading metadata file\r\n",
+					"metadata_schema = StructType([\r\n",
+					"     StructField('feeder_system', StringType(), True),\r\n",
+					"     StructField('delimiter', StringType(), True),\r\n",
+					"     StructField('schema', StringType(), True)\r\n",
+					" ])\r\n",
+					"\r\n",
+					"syn_logger.info(\"Reading metadata from: %s\", metadata_filename)\r\n",
+					"\r\n",
+					"# read the metadata.csv file to fetch delimeter and schema file name from the file prefix (feeder system)\r\n",
+					"metadata_df = spark.read.load(f\"abfss://{container}@{storage_account}.dfs.core.windows.net/{metadata_filename}\", format='csv',header=True, schema=metadata_schema, delimiter=';' )\r\n",
+					"\r\n",
+					"file_prefix = ctl_filename[:ctl_filename.index('_')]\r\n",
+					"filterd_row = metadata_df.filter(metadata_df.feeder_system == file_prefix)\r\n",
+					"delimiter = filterd_row.collect()[0][1]\r\n",
+					"# schema_filename = filterd_row.collect()[0][2] -- uncomment this line, if the metadata file is updated with correct schema file name \r\n",
+					"\r\n",
+					"syn_logger.info(\"File Prefix (Feeder System): %s\", file_prefix)\r\n",
+					"syn_logger.info(\"Corresponding delimeter: %s\", delimiter)"
+				],
+				"execution_count": 70
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##  Read the control file\r\n",
+					"\r\n",
+					"The control file includes data about the \r\n",
+					"- feeder system \r\n",
+					"- pre-feeder system, if relevant \r\n",
+					"- delivery date \r\n",
+					"- delivery number \r\n",
+					"- predelivery number, if relevant \r\n",
+					"- checksum (\"control sum\") \r\n",
+					"- number of delivered records in the data file.\r\n",
+					"\r\n",
+					"Aim is to Extract the feeder system & delivery date,\r\n",
+					"- delivery date will be used to organize the folder structure.\r\n",
+					"- later we might as well do some do some checks based on Checksum received\r\n",
+					"\r\n",
+					"NOTE: Not all fileds will appear in all the control files, this might change based on Encoding used for the control file.\r\n",
+					"This information needs to be analyzed in detail, for now we are poceeding with the identified feeder families like (ABS, FRA and Germany)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"#apply the schema based on the encoding of the control file\r\n",
+					"\r\n",
+					"ctl_schema = StructType([\r\n",
+					"    StructField(\"feeder\", StringType(), True),        \r\n",
+					"    StructField(\"delivery\", StringType(), True),\r\n",
+					"    StructField(\"delivery_number\", StringType(), True),        \r\n",
+					"    StructField(\"previous_delivery_number\", StringType(), True),        \r\n",
+					"    StructField(\"sum_of_amount\", StringType(), True),        \r\n",
+					"    StructField(\"sum_of_transactions\", StringType(), True)\r\n",
+					"])\r\n",
+					"\r\n",
+					"syn_logger.info(\"Reading control file from: %s\", control_df)\r\n",
+					"\r\n",
+					"control_df = spark.read.load(f\"abfss://{upload_container}@{storage_account}.dfs.core.windows.net/{ctl_filename}\", \r\n",
+					"                                    format='csv',header=False, delimiter = delimiter, schema = ctl_schema)\r\n",
+					"\r\n",
+					"#select the fs_id and date\r\n",
+					"syn_logger.warn(\"position of fs is and dates might change, select the cell values after applying the schema based on encoding type\")\r\n",
+					"feeder_system_id = control_df.collect()[0][0]\r\n",
+					"delivery_date = control_df.collect()[0][1]\r\n",
+					"\r\n",
+					"syn_logger.info(\"Feeder System Id: %s\", feeder_system_id)\r\n",
+					"syn_logger.info(\"Delivery date: %s\", delivery_date)"
+				],
+				"execution_count": 72
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"**Fetch the schema from EDC**"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"syn_logger.info(\"Reading schema file: %s\", schema_filename)\r\n",
+					"schema_df = spark.read.load(f\"abfss://{container}@{storage_account}.dfs.core.windows.net/{schema_filename}\", format='csv',header=True, delimiter=',' )\r\n",
+					"# schema_df.show()\r\n",
+					"\r\n",
+					"data_type_mapping = {\r\n",
+					"            \"binary\": BinaryType(),\r\n",
+					"            \"boolean\": BooleanType(),\r\n",
+					"            \"tinyint\": ByteType(),\r\n",
+					"            \"char\": StringType(),\r\n",
+					"            \"date\": DateType(),\r\n",
+					"            \"decimal\": DecimalType(),\r\n",
+					"            \"double\": DoubleType(),\r\n",
+					"            \"float\": FloatType(),\r\n",
+					"            \"int\": IntegerType(),\r\n",
+					"            \"long\": LongType(),\r\n",
+					"            \"short\": ShortType(),\r\n",
+					"            \"string\": StringType(),\r\n",
+					"            \"varchar\": StringType(),\r\n",
+					"            \"datetime\": TimestampType()\r\n",
+					"        }\r\n",
+					"\r\n",
+					"dat_schema = StructType([])\r\n",
+					"\r\n",
+					"rows = schema_df.collect()\r\n",
+					"for row in rows:\r\n",
+					"    # print(row['column_name'] + \",\" +row['datatype'])\r\n",
+					"    dat_schema.add(row['column_name'], data_type_mapping[row['datatype']])\r\n",
+					"\r\n",
+					"syn_logger.info(\"Schema Loaded\")"
+				],
+				"execution_count": 83
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"**Read the data file and apply the schema to read the contents**"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"syn_logger.info(\"Reading data file: %s\", data_filename)\r\n",
+					"datafile_df = spark.read.load(f\"abfss://{upload_container}@{storage_account}.dfs.core.windows.net/{data_filename}\", \r\n",
+					"                                format='csv',header=False, schema = dat_schema, delimiter=delimiter )\r\n",
+					"syn_logger.info(\"Loaded data file: %s\", data_filename)"
+				],
+				"execution_count": 88
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"fs_mandt_value = '#'\r\n",
+					"fs_mandt2_value = '#'\r\n",
+					"\r\n",
+					"if 'fs_mandt' in datafile_df.columns:\r\n",
+					"    fs_mandt_value = datafile_df.select(\"fs_mandt\").distinct().collect()[0][0]\r\n",
+					"    \r\n",
+					"if 'fs_mandt2' in datafile_df.columns:\r\n",
+					"    fs_mandt2_value = datafile_df.select(\"fs_mandt2\").distinct().collect()[0][0]\r\n",
+					"   "
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"**Fetch the mandt value**\r\n",
+					"- first the fetch the fs_family using fs_id from **map_2fs_family.csv**\r\n",
+					"- fetch the **mandt** using the **fs_family**, **fs_mandt1** and **fs_mandt2** values from data file"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"map_2fs_family_df = spark.read.load(f\"abfss://{container}@{storage_account}.dfs.core.windows.net/map_2fs_family.csv\", format='csv',header=True, delimiter=',', inferSchema=True )\r\n",
+					"# display(map_2fs_family_df.limit(3))"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"fs_family = None\r\n",
+					"fs_family_df = map_2fs_family_df.select('fs_family').filter(map_2fs_family_df.fs_id == feeder_system_id)\r\n",
+					"if fs_family_df.count() >= 1:\r\n",
+					"    fs_family = fs_family_df.collect()[0][0]\r\n",
+					"# print(fs_family)\r\n",
+					""
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"map_2mandt_df= spark.read.load(f\"abfss://{container}@{storage_account}.dfs.core.windows.net/map_2mandt.csv\", format='csv',header=True, delimiter=',', inferSchema=True )\r\n",
+					"# display(map_2mandt_df.filter(map_2mandt_df.fs_family == 'ABS').limit(5))"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"map_2mandt_df = map_2mandt_df.filter((map_2mandt_df.fs_family == fs_family))\r\n",
+					"# display(map_2mandt_df)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"mandt = None\r\n",
+					"\r\n",
+					"#fs_mandt pfs_id fs_mandt2\r\n",
+					"valuesToCompare = [fs_mandt2_value, feeder_system_id, fs_mandt_value]\r\n",
+					"\r\n",
+					"# for i in range(len(valuesToCompare)):\r\n",
+					"#     print(\"valuesToCompare {}: {}\".format(i + 1, valuesToCompare[i]))\r\n",
+					"\r\n",
+					"\r\n",
+					"for i in range(len(valuesToCompare) + 1):\r\n",
+					"    # print(\"valuesToCompare {}: {}\".format(0, valuesToCompare[0]))\r\n",
+					"    # print(\"valuesToCompare {}: {}\".format(1, valuesToCompare[1]))\r\n",
+					"    # print(\"valuesToCompare {}: {}\".format(2, valuesToCompare[2]))\r\n",
+					"\r\n",
+					"    mandt_df = map_2mandt_df.select('mandt').filter((map_2mandt_df.fs_mandt2 == valuesToCompare[0]) & (map_2mandt_df.pfs_id == valuesToCompare[1]) & (map_2mandt_df.fs_mandt == valuesToCompare[2]))\r\n",
+					"    if mandt_df.count() >= 1:\r\n",
+					"        print(\"found mandt {}\".format(mandt_df.collect()[0][0]))\r\n",
+					"        mandt = mandt_df.collect()[0][0]\r\n",
+					"        break\r\n",
+					"    else:\r\n",
+					"        valuesToCompare[i] = '#'\r\n",
+					"\r\n",
+					"# print(mandt)\r\n",
+					"        "
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"Write the data file in parquet format partionined by YEAR, MONTH, DAY and CLIENT_ID (which is mandt)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"from datetime import datetime\r\n",
+					"# adls_path = f\"abfss://{curated_container}@{storage_account}.dfs.core.windows.net/test.parquet\"\r\n",
+					"\r\n",
+					"dt = datetime.strptime(delivery_date, '%Y%m%d')\r\n",
+					"\r\n",
+					"# datafile_df = datafile_df.withColumn(\"MANDT\", lit(mandt)) \\\r\n",
+					"#             .withColumn(\"PARTITION_KEY_YEAR\", lit(dt.year)) \\\r\n",
+					"#             .withColumn(\"PARTITION_KEY_MONTH\", lit(dt.month)) \\\r\n",
+					"#             .withColumn(\"PARTITION_KEY_DAY\", lit(dt.day)) \r\n",
+					"\r\n",
+					"# datafile_df.write.partitionBy(\"MANDT\", \"PARTITION_KEY_YEAR\", \"PARTITION_KEY_MONTH\", \"PARTITION_KEY_DAY\").format(\"parquet\").mode(\"append\").save(adls_path)\r\n",
+					"\r\n",
+					"# #datafile_df.write.format(\"parquet\").mode(\"append\").save(adls_path)"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					},
+					"collapsed": false
+				},
+				"source": [
+					"adls_path = f\"abfss://{curated_container}@{storage_account}.dfs.core.windows.net\"\r\n",
+					"data_filename = data_filename.replace('.dat', '.parquet')\r\n",
+					"file_path_to_write = adls_path + '/' + str(mandt) + '/' + prefix +'/' + str(dt.year) + '/' + str(dt.month) + '/' + str(dt.day) +  '/' + data_filename\r\n",
+					"datafile_df.write.mode(\"overwrite\").parquet(file_path_to_write)\r\n",
+					"# display(spark.read.parquet(file_path_to_write))"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"**NOTE** : we have to manage the negative / exception scenarios\r\n",
+					"This will be managed once we have moved the logic to a class via Try/Cathch and return the exitValue as 0 "
+				]
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"from notebookutils import mssparkutils\r\n",
+					"mssparkutils.notebook.exit(delivery_date)"
+				],
+				"execution_count": null
+			}
+		]
+	}
+}
