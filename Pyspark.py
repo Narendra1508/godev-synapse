@@ -18,3 +18,10 @@ schema = StructType([ \
 df = spark.createDataFrame(data=data2,schema=schema)
 df.printSchema()
 df.show(truncate=False)
+
+
+
+df2 = df.withColumn("new_gender", when(df.gender == "M","Male")
+                                 .when(df.gender == "F","Female")
+                                 .when(df.gender.isNull() ,"")
+                                 .otherwise(df.gender))
