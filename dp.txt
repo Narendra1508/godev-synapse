@@ -1,5 +1,3 @@
-Here’s a revised and clear summary that incorporates the additional information for presenting the DataPool's role in SimpliFi:
-
 In the SimpliFi project, our primary focus is building a cloud-based DataPool on Azure Synapse. This serves as the backbone for ingesting, processing, managing, and exposing data. Here’s an overview of the key components and steps involved:
 
     Data Ingestion & Staging: We onboard data from various source systems into the DataPool, storing it in ADLS Gen2 in a schema-validated and re-formatted Parquet file format. This acts as the foundation for further processing.
